@@ -19,7 +19,9 @@
 # Build stage 1 `builder`:
 # Download and extract RocketMQ
 ################################################################################
-FROM eclipse-temurin:8-jdk-alpine AS builder
+#FROM eclipse-temurin:8-jdk-alpine AS builder
+#FROM eclipse-temurin:8-jdk-alpine AS builder
+FROM alpine:3.18.2  AS builder
 
 ARG version
 
@@ -41,7 +43,38 @@ RUN unzip rocketmq.zip; \
 # Build stage 2:
 # Make the actual RocketMQ docker image
 ################################################################################
-FROM eclipse-temurin:8-jdk-alpine
+#FROM eclipse-temurin:8-jdk-alpine
+#FROM openjdk:17-oraclelinux8
+FROM alpine:3.18.2
+
+#RUN apk add --no-cache tzdata \
+# && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+# && echo Asia/Shanghai > /etc/timezone
+
+RUN apk add --no-cache openjdk17 && \
+    apk add --no-cache libc6-compat
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+ENV PATH=$PATH:${JAVA_HOME}/bin
+
+# glibc
+#RUN apk add --no-cache libc6-compat
+
+#RUN curl -L https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk -o glibc-2.35-r1.apk;
+#RUN apk --no-cache add ca-certificates wget
+#RUN wget -O /tmp/glibc-2.35-r1.apk https://ghproxy.com/https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk
+#RUN wget https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -O /etc/apk/keys/sgerrand.rsa.pub
+#
+#RUN apk add --no-cache /tmp/glibc-2.35-r1.apk
+#RUN rm /tmp/glibc-2.35-r1.apk
+#RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
+#RUN apk add glibc
+
+#RUN apk add --no-cache wget ca-certificates && \
+#    wget https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -O /etc/apk/keys/sgerrand.rsa.pub && \
+#    wget https://ghproxy.com/https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r1/glibc-2.35-r1.apk && \
+#    apk add --no-cache glibc-2.35-r1.apk && \
+#    rm glibc-2.35-r1.apk
 
 ARG user=rocketmq
 ARG group=rocketmq
@@ -59,6 +92,10 @@ ENV ROCKETMQ_HOME  /home/rocketmq/rocketmq-${ROCKETMQ_VERSION}
 
 # Expose namesrv port
 EXPOSE 9876
+
+# expose proxy port
+EXPOSE 8080
+
 # Expose broker ports
 EXPOSE 10909 10911 10912
 
@@ -71,6 +108,7 @@ RUN addgroup --gid ${gid} ${group} \
 
 # Copy customized scripts
 COPY scripts/ ${ROCKETMQ_HOME}/bin/
+RUN chmod a+x ${ROCKETMQ_HOME}/bin/docker-entrypoint.sh
 
 # Copy RocketMQ artifact from builder
 COPY --from=builder --chown=${uid}:${gid} /tmp/rocketmq-${version}/ ${ROCKETMQ_HOME}
@@ -80,11 +118,9 @@ COPY --from=builder --chown=${uid}:${gid} /tmp/rocketmq-${version}/ ${ROCKETMQ_H
 # Override customized scripts for broker
 # Export Java options
 # Add ${JAVA_HOME}/lib/ext as java.ext.dirs
-RUN mv ${ROCKETMQ_HOME}/bin/runserver-customize.sh ${ROCKETMQ_HOME}/bin/runserver.sh \
- && mv ${ROCKETMQ_HOME}/bin/runbroker-customize.sh ${ROCKETMQ_HOME}/bin/runbroker.sh \
- && chmod -R a+x ${ROCKETMQ_HOME}/bin/ \
+RUN chmod -R a+x ${ROCKETMQ_HOME}/bin/ \
  && export JAVA_OPT=" -Duser.home=/opt" \
- && sed -i 's/${JAVA_HOME}\/jre\/lib\/ext/${JAVA_HOME}\/jre\/lib\/ext:${JAVA_HOME}\/lib\/ext/' ${ROCKETMQ_HOME}/bin/tools.sh \
+ #&& sed -i 's/${JAVA_HOME}\/jre\/lib\/ext/${JAVA_HOME}\/jre\/lib\/ext:${JAVA_HOME}\/lib\/ext/' ${ROCKETMQ_HOME}/bin/tools.sh \
  && chown -R ${uid}:${gid} ${ROCKETMQ_HOME}
 
 USER ${user}
@@ -93,5 +129,5 @@ WORKDIR ${ROCKETMQ_HOME}/bin
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
 # Dummy overridable parameter parsed by entrypoint
-CMD ["dummy"]
-
+#CMD ["dummy"]
+CMD ["/bin/sh"]

@@ -15,15 +15,29 @@
 # limitations under the License.
 #
 
-FROM centos:7
+#FROM centos:7
 
-RUN yum install -y java-1.8.0-openjdk-devel.x86_64 unzip openssl, which gnupg, wget \
- && yum clean all -y
+#RUN yum install -y java-1.8.0-openjdk-devel.x86_64 unzip openssl, which gnupg, wget \
+# && yum clean all -y
 
 # FROM openjdk:8-jdk
 # RUN apt-get update && apt-get install -y --no-install-recommends \
 #  bash libapr1 unzip telnet wget gnupg ca-certificates \
 # && rm -rf /var/lib/apt/lists/*
+
+# jdk 17
+FROM centos:8.4.2105
+
+#RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+# && echo Asia/Shanghai > /etc/timezone
+
+RUN cd /etc/yum.repos.d/
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+
+RUN yum install -y java-17-openjdk-devel wget telnet git openssl && \
+    yum clean all -y
+
 
 ARG user=rocketmq
 ARG group=rocketmq
@@ -38,8 +52,8 @@ RUN groupadd -g ${gid} ${group} \
 
 ARG version
 
-# install maven 3.6.3
-ARG MAVEN_VERSION=3.6.3
+# install maven
+ARG MAVEN_VERSION=3.9.2
 ARG MAVEN_DOWNLOAD_URL=https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz
 
 RUN mkdir -p /usr/share/maven /usr/share/maven/ref && \
@@ -47,48 +61,52 @@ RUN mkdir -p /usr/share/maven /usr/share/maven/ref && \
     tar -xzf /tmp/apache-maven.tar.gz -C /usr/share/maven --strip-components=1 && \
     rm -f /tmp/apache-maven.tar.gz && \
     ln -s /usr/share/maven/bin/mvn /usr/bin/mvn
-    
+
 ### make it faster if remove those "#"s bellow
-# RUN sed -i '159i \
-#     <mirror> \
-#       <id>nexus-tencentyun</id> \
-#       <mirrorOf>*</mirrorOf> \
-#       <name>Nexus tencentyun</name> \
-#       <url>http://mirrors.cloud.tencent.com/nexus/repository/maven-public/</url> \
-#     </mirror> \
-# ' /usr/share/maven/conf/settings.xml
+RUN sed -i '159i \
+     <mirror> \
+       <id>nexus-tencentyun</id> \
+       <mirrorOf>*</mirrorOf> \
+       <name>Nexus tencentyun</name> \
+       <url>http://mirrors.tencent.com/nexus/repository/maven-public/</url> \
+     </mirror> \
+ ' /usr/share/maven/conf/settings.xml
 
 RUN cat /usr/share/maven/conf/settings.xml
+RUN cp -f /usr/share/maven/conf/settings.xml /root/.m2/settings.xml
 
 ENV ROCKETMQ_DASHBOARD_VERSION ${version}
 ENV ROCKETMQ_DASHBOARD_HOME  /home/rocketmq/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}
 WORKDIR ${ROCKETMQ_DASHBOARD_HOME}
 
-RUN set -eux; \
-    curl -L https://dist.apache.org/repos/dist/release/rocketmq/rocketmq-dashboard/${ROCKETMQ_DASHBOARD_VERSION}/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}-source-release.zip -o rocketmq-dashboard.zip; \
-    curl -L https://dist.apache.org/repos/dist/release/rocketmq/rocketmq-dashboard/${ROCKETMQ_DASHBOARD_VERSION}/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}-source-release.zip.asc -o rocketmq-dashboard.zip.asc; \
-    wget https://www.apache.org/dist/rocketmq/KEYS --no-check-certificate; \
-    \
-    gpg --import KEYS; \
-    gpg --batch --verify rocketmq-dashboard.zip.asc rocketmq-dashboard.zip ; \
-    unzip rocketmq-dashboard.zip ; \
-    rm rocketmq-dashboard.zip rocketmq-dashboard.zip.asc KEYS;
-    
-RUN cd rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION} ; \
-    mvn -DskipTests clean install ;\
-    ls -l target ; 
+RUN git clone -b master --single-branch https://ghproxy.com/https://github.com/apache/rocketmq-dashboard.git /tmp/rocketmq-dashboard
 
+#RUN set -eux; \
+#    curl -L https://dist.apache.org/repos/dist/release/rocketmq/rocketmq-dashboard/${ROCKETMQ_DASHBOARD_VERSION}/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}-source-release.zip -o rocketmq-dashboard.zip; \
+#    curl -L https://dist.apache.org/repos/dist/release/rocketmq/rocketmq-dashboard/${ROCKETMQ_DASHBOARD_VERSION}/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}-source-release.zip.asc -o rocketmq-dashboard.zip.asc; \
+#    wget https://www.apache.org/dist/rocketmq/KEYS --no-check-certificate; \
+#    \
+#    gpg --import KEYS; \
+#    gpg --batch --verify rocketmq-dashboard.zip.asc rocketmq-dashboard.zip ; \
+#    unzip rocketmq-dashboard.zip ; \
+#    rm rocketmq-dashboard.zip rocketmq-dashboard.zip.asc KEYS;
+#
+RUN cd /tmp/rocketmq-dashboard ; \
+    mvn -s /usr/share/maven/conf/settings.xml -DskipTests clean install ; \
+    ls -l target ; \
+    mkdir -p $ROCKETMQ_DASHBOARD_HOME/bin ; \
+    mv target/rocketmq-dashboard-*.jar $ROCKETMQ_DASHBOARD_HOME/bin/rocketmq-dashboard.jar ;
 
-RUN mkdir bin; \
-    mv rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}/target/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}.jar bin/ ; \
-    mv bin/rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}.jar bin/rocketmq-dashboard.jar; \
-    ls -l bin; \
-    rm -rf rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}
-    
+#COPY rocketmq-dashboard-1.0.1-SNAPSHOT.jar rocketmq-dashboard-${ROCKETMQ_DASHBOARD_VERSION}/bin/rocketmq-dashboard.jar
+
 RUN rm -rf /root/.m2/repository/*
 RUN rm -rf /usr/share/maven
-RUN yum remove wget unzip openssl -y
+RUN rm -rf /tmp/rocketmq-dashboard
+RUN yum remove git openssl -y
 
 RUN chown -R ${uid}:${gid} ${ROCKETMQ_DASHBOARD_HOME}
+
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "bin/rocketmq-dashboard.jar"];
+
+#ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar bin/rocketmq-dashboard.jar"]
+CMD ["/bin/sh"]

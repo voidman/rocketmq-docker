@@ -39,10 +39,10 @@ checkVersion $ROCKETMQ_VERSION
 # Build rocketmq
 case "${BASE_IMAGE}" in
     alpine)
-        docker build --no-cache -f Dockerfile-alpine -t apache/rocketmq:${ROCKETMQ_VERSION}-alpine --build-arg version=${ROCKETMQ_VERSION} .
+        docker build --platform linux/arm64 --no-cache -f Dockerfile-alpine -t apache/rocketmq:${ROCKETMQ_VERSION}-alpine --build-arg version=${ROCKETMQ_VERSION} .
     ;;
     centos)
-        docker build --no-cache -f Dockerfile-centos -t apache/rocketmq:${ROCKETMQ_VERSION} --build-arg version=${ROCKETMQ_VERSION} .
+        docker build --platform linux/arm64 --no-cache -f Dockerfile-centos -t apache/rocketmq:${ROCKETMQ_VERSION}-centos --build-arg version=${ROCKETMQ_VERSION} .
     ;;
     *)
         echo "${BASE_IMAGE} is not supported, supported base images: centos, alpine"

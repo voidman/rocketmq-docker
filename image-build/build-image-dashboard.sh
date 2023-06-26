@@ -16,6 +16,11 @@
 # limitations under the License.
 
 checkVersion() {
+    if [ "$1" = "latest" ]; then
+        return 1
+    fi
+
+
     echo "Version = $1"
 	echo $1 |grep -E "^[0-9]+\.[0-9]+\.[0-9]+" > /dev/null
     if [ $? = 0 ]; then
@@ -39,7 +44,7 @@ checkVersion $ROCKETMQ_DASHBOARD_VERSION
 # Build rocketmq
 case "${BASE_IMAGE}" in
     centos)
-        docker build --no-cache -f Dockerfile-centos-dashboard -t apache/rocketmq-dashboard:${ROCKETMQ_DASHBOARD_VERSION}-centos --build-arg version=${ROCKETMQ_DASHBOARD_VERSION} .
+        docker build --platform linux/arm64 --no-cache -f Dockerfile-centos-dashboard -t apache/rocketmq-dashboard:${ROCKETMQ_DASHBOARD_VERSION}-centos --build-arg version=${ROCKETMQ_DASHBOARD_VERSION} .
     ;;
     *)
         echo "${BASE_IMAGE} is not supported, supported base images: centos"
