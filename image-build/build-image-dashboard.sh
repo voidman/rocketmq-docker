@@ -44,7 +44,7 @@ checkVersion $ROCKETMQ_DASHBOARD_VERSION
 # Build rocketmq
 case "${BASE_IMAGE}" in
     centos)
-        docker build --platform linux/arm64 --no-cache -f Dockerfile-centos-dashboard -t apache/rocketmq-dashboard:${ROCKETMQ_DASHBOARD_VERSION}-centos --build-arg version=${ROCKETMQ_DASHBOARD_VERSION} .
+        docker buildx build --platform linux/amd64,linux/arm64 --no-cache -f Dockerfile-centos-dashboard --push -t voidmanc/rocketmq-dashboard:${ROCKETMQ_DASHBOARD_VERSION}-centos --build-arg version=${ROCKETMQ_DASHBOARD_VERSION} .
     ;;
     *)
         echo "${BASE_IMAGE} is not supported, supported base images: centos"

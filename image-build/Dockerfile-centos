@@ -15,33 +15,7 @@
 # limitations under the License.
 #
 
-FROM centos:8.4.2105
-
-#RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
-# && echo Asia/Shanghai > /etc/timezone
-
-RUN cd /etc/yum.repos.d/
-RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-
-RUN yum install -y java-17-openjdk-devel unzip openssl which gnupg telnet && \
-    yum clean all -y
-
-# FROM openjdk:8-jdk
-# RUN apt-get update && apt-get install -y --no-install-recommends \
-#		bash libapr1 unzip telnet wget gnupg ca-certificates \
-#	&& rm -rf /var/lib/apt/lists/*
-
-ARG user=rocketmq
-ARG group=rocketmq
-ARG uid=3000
-ARG gid=3000
-
-# RocketMQ is run with user `rocketmq`, uid = 3000
-# If you bind mount a volume from the host or a data container,
-# ensure you use the same uid
-RUN groupadd -g ${gid} ${group} \
-    && useradd -u ${uid} -g ${gid} -m -s /bin/bash ${user}
+FROM --platform=$BUILDPLATFORM centos:8.4.2105 as builder
 
 ARG version
 
@@ -49,16 +23,20 @@ ARG version
 ENV ROCKETMQ_VERSION ${version}
 
 # Rocketmq home
-ENV ROCKETMQ_HOME  /home/rocketmq/rocketmq-${ROCKETMQ_VERSION}
+#ENV ROCKETMQ_HOME  /home/rocketmq/rocketmq-${ROCKETMQ_VERSION}
+ENV ROCKETMQ_HOME  /home/rocketmq
+WORKDIR ${ROCKETMQ_HOME}
 
-WORKDIR  ${ROCKETMQ_HOME}
+RUN cd /etc/yum.repos.d/ \
+    && sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* \
+    && sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* \
+    && yum install -y java-17-openjdk-devel unzip openssl which gnupg telnet \
+    && yum clean all -y
 
 RUN set -eux; \
     curl -L https://archive.apache.org/dist/rocketmq/${ROCKETMQ_VERSION}/rocketmq-all-${ROCKETMQ_VERSION}-bin-release.zip -o rocketmq.zip; \
     curl -L https://archive.apache.org/dist/rocketmq/${ROCKETMQ_VERSION}/rocketmq-all-${ROCKETMQ_VERSION}-bin-release.zip.asc -o rocketmq.zip.asc; \
-    #https://www.apache.org/dist/rocketmq/KEYS
 	curl -L https://www.apache.org/dist/rocketmq/KEYS -o KEYS; \
-	\
 	gpg --import KEYS; \
     gpg --batch --verify rocketmq.zip.asc rocketmq.zip ; \
     unzip rocketmq.zip ; \
@@ -68,37 +46,50 @@ RUN set -eux; \
 
 RUN mkdir -p ${ROCKETMQ_HOME}/conf/acl
 
-# add scripts
-COPY scripts/ ${ROCKETMQ_HOME}/bin/
-RUN chmod a+x ${ROCKETMQ_HOME}/bin/docker-entrypoint.sh
+FROM centos:8.4.2105
 
-RUN chown -R ${uid}:${gid} ${ROCKETMQ_HOME}
+ARG user=rocketmq
+ARG group=rocketmq
+ARG uid=3000
+ARG gid=3000
 
-# expose namesrv port
-EXPOSE 9876
-
-# expose proxy port
-EXPOSE 8080
-
-# add customized scripts for namesrv
-RUN chmod a+x ${ROCKETMQ_HOME}/bin/runserver.sh \
- && chmod a+x ${ROCKETMQ_HOME}/bin/mqnamesrv
-
-# expose broker ports
-EXPOSE 10909 10911 10912
-
-# add customized scripts for broker
-RUN chmod a+x ${ROCKETMQ_HOME}/bin/runbroker.sh \
- && chmod a+x ${ROCKETMQ_HOME}/bin/mqbroker
-
+# Rocketmq home
+ARG version
+ENV ROCKETMQ_VERSION ${version}
+ENV ROCKETMQ_HOME /home/rocketmq
 ENV JAVA_HOME=/usr/lib/jvm/jre-17-openjdk
 ENV PATH=$PATH:${JAVA_HOME}/bin
 
-# export Java options
-RUN export JAVA_OPT=" -Duser.home=/opt"
+# add scripts
+#--chown=${uid}:${gid}
+COPY scripts/docker-entrypoint.sh ${ROCKETMQ_HOME}/bin/
+COPY --from=builder ${ROCKETMQ_HOME}/. ${ROCKETMQ_HOME}
 
-# Add ${JAVA_HOME}/lib/ext as java.ext.dirs
-#RUN sed -i 's/${JAVA_HOME}\/jre\/lib\/ext/${JAVA_HOME}\/jre\/lib\/ext:${JAVA_HOME}\/lib\/ext/' ${ROCKETMQ_HOME}/bin/tools.sh
+# RocketMQ is run with user `rocketmq`, uid = 3000
+# If you bind mount a volume from the host or a data container,
+# ensure you use the same uid
+RUN cd /etc/yum.repos.d/ \
+    && sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* \
+    && sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* \
+    && yum install -y java-17-openjdk-headless vi telnet \
+    && yum clean all -y \
+    && groupadd -g ${gid} ${group} \
+    && useradd -u ${uid} -g ${gid} -m -s /bin/bash ${user} \
+    && mkdir -p /home/rocketmq/logs \
+    && mkdir -p /home/rocketmq/store \
+    && chown -R rocketmq:rocketmq /home/rocketmq \
+    && chmod -R a+x ${ROCKETMQ_HOME}/bin/ \
+    && export JAVA_OPT=" -Duser.home=/opt" \
+    && sed -i 's/${JAVA_HOME}\/jre\/lib\/ext/${JAVA_HOME}\/jre\/lib\/ext:${JAVA_HOME}\/lib\/ext/' ${ROCKETMQ_HOME}/bin/tools.sh
+
+# expose namesrv port
+EXPOSE 9876 9878
+
+# expose proxy port
+EXPOSE 8080 8081
+
+# expose broker ports
+EXPOSE 10909 10911 10912
 
 USER ${user}
 
